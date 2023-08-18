@@ -135,7 +135,7 @@ void emfile_task(void* arg)
 								printf("File size is less than %d \r\n",emfile_cmd.size_bytes);
 							}
 
-							printf("Reading %"PRIu32" bytes from the file. \r\n", num_bytes_to_read);
+							printf("Reading the file : %s  \r\n", filenames[emfile_cmd.file_index]);
 							file_size = FS_Read(file_ptr, emfile_cmd.buffer_ptr, num_bytes_to_read);
 
 							if(file_size != num_bytes_to_read)
@@ -183,7 +183,7 @@ void emfile_task(void* arg)
 							   check_error("Error in writing to the file", error);
 						   }
 
-						   printf("File has been written \n");
+						   printf("File %s has been written \r\n", filenames[emfile_cmd.file_index]);
 						   error = FS_FClose(file_ptr);
 						   check_error("Error in closing the file", error);
 
