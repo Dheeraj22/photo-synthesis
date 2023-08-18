@@ -52,7 +52,7 @@
 #include "secure_http_client.h"
 #include "FreeRTOS.h"
 #include <task.h>
-
+#include "display_task.h"
 /* Include serial flash library and QSPI memory configurations only for the
  * kits that require the Wi-Fi firmware to be loaded in external QSPI NOR flash.
  */
@@ -67,7 +67,8 @@
 /* RTOS related macros. */
 #define HTTPS_CLIENT_TASK_STACK_SIZE        (5 * 1024)
 #define HTTPS_CLIENT_TASK_PRIORITY          (1)
-
+#define TFT_TASK_STACK_SIZE        			(1024 * 10)
+#define TFT_TASK_PRIORITY          			(configMAX_PRIORITIES - 3)
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
@@ -125,8 +126,10 @@ int main(void)
     APP_INFO(("===================================\n\n"));
 
     /* Starts the HTTPS client in secure mode. */
-    xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
+    /* xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
                 HTTPS_CLIENT_TASK_PRIORITY, &https_client_task_handle);
+	*/
+    xTaskCreate(display_task, "Display Task", TFT_TASK_STACK_SIZE, NULL,  TFT_TASK_PRIORITY,  NULL);
 
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();

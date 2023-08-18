@@ -84,7 +84,7 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS=FREERTOS LWIP MBEDTLS SECURE_SOCKETS
+COMPONENTS=FREERTOS LWIP MBEDTLS SECURE_SOCKETS EMWIN_OSNTS
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
 DISABLE_COMPONENTS=
