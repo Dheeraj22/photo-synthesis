@@ -53,6 +53,7 @@
 #include "FreeRTOS.h"
 #include <task.h>
 #include "display_task.h"
+#include "motion_task.h"
 /* Include serial flash library and QSPI memory configurations only for the
  * kits that require the Wi-Fi firmware to be loaded in external QSPI NOR flash.
  */
@@ -67,13 +68,19 @@
 /* RTOS related macros. */
 #define HTTPS_CLIENT_TASK_STACK_SIZE        (5 * 1024)
 #define HTTPS_CLIENT_TASK_PRIORITY          (1)
-#define TFT_TASK_STACK_SIZE        			(1024 * 10)
-#define TFT_TASK_PRIORITY          			(configMAX_PRIORITIES - 3)
+#define DISPLAY_TASK_STACK_SIZE        			(1024 * 10)
+#define DISPLAY_TASK_PRIORITY          			(configMAX_PRIORITIES - 3)
+
+#define MOTION_TASK_STACK_SIZE        (64)
+#define MOTION_TASK_PRIORITY        (7)
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
 /* HTTPS client task handle. */
 TaskHandle_t https_client_task_handle;
+TaskHandle_t display_task_handle;
+TaskHandle_t motion_task_handle;
+
 
 /*******************************************************************************
  * Function Name: main
@@ -129,7 +136,8 @@ int main(void)
     /* xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
                 HTTPS_CLIENT_TASK_PRIORITY, &https_client_task_handle);
 	*/
-    xTaskCreate(display_task, "Display Task", TFT_TASK_STACK_SIZE, NULL,  TFT_TASK_PRIORITY,  NULL);
+    xTaskCreate(display_task, "Display Task", DISPLAY_TASK_STACK_SIZE, NULL,  DISPLAY_TASK_PRIORITY,  &display_task_handle);
+    xTaskCreate(motion_task, "Motion Task", MOTION_TASK_STACK_SIZE, NULL,  MOTION_TASK_PRIORITY,  &motion_task_handle);
 
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
