@@ -11,5 +11,4 @@
 void display_task(void *arg);
 
 
-
 #endif /* SOURCE_DISPLAY_TASK_H_ */

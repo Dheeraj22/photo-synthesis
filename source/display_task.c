@@ -11,12 +11,18 @@
 #include "cybsp.h"
 #include "display_task.h"
 #include "FreeRTOS.h"
-
+//#include "vw.h"
+#include "emfile_task.h"
+#include "limits.h"
 static void __update_picture(GUI_BITMAP * pBM);
 
 extern GUI_CONST_STORAGE GUI_BITMAP bmpingpong;
 extern GUI_CONST_STORAGE GUI_BITMAP bmvw_golf;
 extern GUI_CONST_STORAGE GUI_BITMAP bmcat;
+extern unsigned char acInfineonBlackLogo[32400UL + 1];
+
+extern QueueHandle_t emfile_command_q;
+
 /* Display Pinout Configuration */
 const mtb_st7789v_pins_t tft_pins =
 {
@@ -33,6 +39,8 @@ const mtb_st7789v_pins_t tft_pins =
     .dc   = CYBSP_D12,
     .rst  = CYBSP_D13
 };
+
+char filebuff[FILE_SIZE_BYTES];
 
 void display_task(void *arg)
 {
@@ -53,12 +61,39 @@ void display_task(void *arg)
 	GUI_GotoXY(10,10);
 	GUI_DispString("Test");
 	uint8_t shift = 0;
+	uint32_t notifiedValue;
+
+	//emfile_command_t test_cmd = {FILE_WRITE, 0u, vw, FILE_SIZE_BYTES};
+
+	emfile_command_t test_cmd = {FILE_READ, 0u, filebuff, FILE_SIZE_BYTES};
+
+	//	emfile_command_t test_cmd = {FORCE_FORMAT, 0u, NULL, 0u};
+
+	xQueueSendToBack(emfile_command_q, &test_cmd, portMAX_DELAY);
+
+	xTaskNotifyWait(0x00,ULONG_MAX,&notifiedValue,portMAX_DELAY);
+
+	if(notifiedValue)
+	{
+		printf("Operation succeeded \r\n");
+	}
+	else
+	{
+		printf("Operation failed \r\n");
+	}
 
 	while(1)
 	{
 
-		__update_picture(&bmcat);
-		__update_picture(&bmvw_golf);
+		//__update_picture(&bmcat);
+		//__update_picture(&bmvw_golf);
+		GUI_Clear();
+		GUI_BMP_Draw(filebuff, 0,0);
+		GUI_DispString("FROM RAM");
+		vTaskDelay(pdMS_TO_TICKS(5000));
+
+
+
 /*
 		GUI_SetColor(GUI_BLUE);
 		shift -= 4;

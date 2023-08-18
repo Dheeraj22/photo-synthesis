@@ -54,6 +54,8 @@
 #include <task.h>
 #include "display_task.h"
 #include "motion_task.h"
+#include "capsense_task.h"
+#include "emfile_task.h"
 /* Include serial flash library and QSPI memory configurations only for the
  * kits that require the Wi-Fi firmware to be loaded in external QSPI NOR flash.
  */
@@ -66,13 +68,22 @@
 * Macros
 ******************************************************************************/
 /* RTOS related macros. */
-#define HTTPS_CLIENT_TASK_STACK_SIZE        (5 * 1024)
-#define HTTPS_CLIENT_TASK_PRIORITY          (1)
-#define DISPLAY_TASK_STACK_SIZE        			(1024 * 10)
-#define DISPLAY_TASK_PRIORITY          			(configMAX_PRIORITIES - 3)
 
-#define MOTION_TASK_STACK_SIZE        (64)
-#define MOTION_TASK_PRIORITY        (7)
+#define HTTPS_CLIENT_TASK_PRIORITY          	(configMAX_PRIORITIES - 4)
+#define DISPLAY_TASK_PRIORITY          			(configMAX_PRIORITIES - 1)
+#define TASK_EMFILE_PRIORITY              	    (configMAX_PRIORITIES - 2)
+#define TASK_CAPSENSE_PRIORITY 				    (configMAX_PRIORITIES - 3)
+#define MOTION_TASK_PRIORITY        			(configMAX_PRIORITIES - 5)
+
+#define HTTPS_CLIENT_TASK_STACK_SIZE        (5 * 1024)
+#define DISPLAY_TASK_STACK_SIZE        		(1024 * 10)
+#define TASK_EMFILE_STACK_SIZE              (512u)
+#define TASK_CAPSENSE_STACK_SIZE 			(256u)
+#define MOTION_TASK_STACK_SIZE        		(256)
+
+/* Queue lengths of message queues used in this project */
+#define SINGLE_ELEMENT_QUEUE (1u)
+
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
@@ -80,7 +91,11 @@
 TaskHandle_t https_client_task_handle;
 TaskHandle_t display_task_handle;
 TaskHandle_t motion_task_handle;
+TaskHandle_t emfile_task_handle;
+TaskHandle_t capsense_task_handle;
 
+/* This enables RTOS aware debugging. */
+volatile int uxTopUsedPriority;
 
 /*******************************************************************************
  * Function Name: main
@@ -99,6 +114,9 @@ TaskHandle_t motion_task_handle;
 int main(void)
 {
     cy_rslt_t result;
+
+    /* This enables RTOS aware debugging in OpenOCD */
+    uxTopUsedPriority = configMAX_PRIORITIES - 1 ;
 
     /* Initialize the Board Support Package (BSP) */
     result = cybsp_init();
@@ -132,13 +150,26 @@ int main(void)
     APP_INFO(("HTTPS Client\n"));
     APP_INFO(("===================================\n\n"));
 
+    /* Create the queues. See the respective data-types for details of queue
+     * contents
+     */
+    capsense_command_q = xQueueCreate(SINGLE_ELEMENT_QUEUE,
+                                      sizeof(capsense_command_t));
+    capsense_touch_q   = xQueueCreate(SINGLE_ELEMENT_QUEUE,
+                                      sizeof(capsense_touch_t));
+    emfile_command_q = xQueueCreate(SINGLE_ELEMENT_QUEUE,
+                                      sizeof(emfile_command_t));
+
     /* Starts the HTTPS client in secure mode. */
     /* xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
                 HTTPS_CLIENT_TASK_PRIORITY, &https_client_task_handle);
 	*/
     xTaskCreate(display_task, "Display Task", DISPLAY_TASK_STACK_SIZE, NULL,  DISPLAY_TASK_PRIORITY,  &display_task_handle);
     xTaskCreate(motion_task, "Motion Task", MOTION_TASK_STACK_SIZE, NULL,  MOTION_TASK_PRIORITY,  &motion_task_handle);
-
+    xTaskCreate(emfile_task, "emFile Task", TASK_EMFILE_STACK_SIZE,
+                NULL, TASK_EMFILE_PRIORITY, &emfile_task_handle);
+    xTaskCreate(task_capsense, "CapSense Task", TASK_CAPSENSE_STACK_SIZE,
+                NULL, TASK_CAPSENSE_PRIORITY, &capsense_task_handle);
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 

@@ -41,7 +41,7 @@ MTB_TYPE=COMBINED
 # ('make library-manager' from command line), which will also update Eclipse IDE launch
 # configurations.
 TARGET=APP_CY8CKIT-062S2-43012
-
+USE_SD_CARD=0
 # Name of application (used to derive name of final linked file).
 #
 # If APPNAME is edited, ensure to update or regenerate launch
@@ -84,7 +84,7 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS=FREERTOS LWIP MBEDTLS SECURE_SOCKETS EMWIN_OSNTS
+COMPONENTS=FREERTOS LWIP MBEDTLS SECURE_SOCKETS EMWIN_OSNTS EMFILE_FAT32 RTOS_AWARE
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
 DISABLE_COMPONENTS=
@@ -98,6 +98,13 @@ SOURCES=
 # Like SOURCES, but for include directories. Value should be paths to
 # directories (without a leading -I).
 INCLUDES=./configs
+
+ifeq ($(USE_SD_CARD),1)
+CY_IGNORE+=emfile_config/FS_ConfigNOR_BM_SPIFI.c
+else
+CY_IGNORE+=emfile_config/FS_ConfigMMC_CM_HS.c
+endif
+
 
 # Custom configuration of mbedtls library.
 MBEDTLSFLAGS = MBEDTLS_USER_CONFIG_FILE='"mbedtls_user_config.h"'
