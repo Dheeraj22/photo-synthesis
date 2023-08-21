@@ -69,13 +69,13 @@
 ******************************************************************************/
 /* RTOS related macros. */
 
-#define HTTPS_CLIENT_TASK_PRIORITY          	(configMAX_PRIORITIES - 4)
-#define DISPLAY_TASK_PRIORITY          			(configMAX_PRIORITIES - 1)
+#define HTTPS_CLIENT_TASK_PRIORITY          	(configMAX_PRIORITIES - 1)
+#define DISPLAY_TASK_PRIORITY          			(configMAX_PRIORITIES - 3)
 #define TASK_EMFILE_PRIORITY              	    (configMAX_PRIORITIES - 2)
-#define TASK_CAPSENSE_PRIORITY 				    (configMAX_PRIORITIES - 3)
+#define TASK_CAPSENSE_PRIORITY 				    (configMAX_PRIORITIES - 4)
 #define MOTION_TASK_PRIORITY        			(configMAX_PRIORITIES - 5)
 
-#define HTTPS_CLIENT_TASK_STACK_SIZE        (5 * 1024)
+#define HTTPS_CLIENT_TASK_STACK_SIZE        (50 * 1024)
 #define DISPLAY_TASK_STACK_SIZE        		(1024 * 10)
 #define TASK_EMFILE_STACK_SIZE              (512u)
 #define TASK_CAPSENSE_STACK_SIZE 			(256u)
@@ -157,19 +157,19 @@ int main(void)
                                       sizeof(capsense_command_t));
     capsense_touch_q   = xQueueCreate(SINGLE_ELEMENT_QUEUE,
                                       sizeof(capsense_touch_t));
-    emfile_command_q = xQueueCreate(SINGLE_ELEMENT_QUEUE,
+    emfile_command_q = xQueueCreate(4u,
                                       sizeof(emfile_command_t));
 
     /* Starts the HTTPS client in secure mode. */
-    /* xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
+     xTaskCreate(https_client_task, "HTTPS Client", HTTPS_CLIENT_TASK_STACK_SIZE, NULL,
                 HTTPS_CLIENT_TASK_PRIORITY, &https_client_task_handle);
-	*/
     xTaskCreate(display_task, "Display Task", DISPLAY_TASK_STACK_SIZE, NULL,  DISPLAY_TASK_PRIORITY,  &display_task_handle);
     xTaskCreate(motion_task, "Motion Task", MOTION_TASK_STACK_SIZE, NULL,  MOTION_TASK_PRIORITY,  &motion_task_handle);
     xTaskCreate(emfile_task, "emFile Task", TASK_EMFILE_STACK_SIZE,
                 NULL, TASK_EMFILE_PRIORITY, &emfile_task_handle);
     xTaskCreate(task_capsense, "CapSense Task", TASK_CAPSENSE_STACK_SIZE,
                 NULL, TASK_CAPSENSE_PRIORITY, &capsense_task_handle);
+
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 

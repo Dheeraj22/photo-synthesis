@@ -80,14 +80,14 @@
                                                      }                              \
                                                  } while(0);
 
-#define HTTPS_PORT                               (50007)
-#define HTTPS_SERVER_HOST                        "192.168.127.89"
+#define HTTPS_PORT                               (3000)
+#define HTTPS_SERVER_HOST                        "100.25.166.245"
 #define TRANSPORT_SEND_RECV_TIMEOUT_MS           (5000)
 #define HTTP_GET_BUFFER_LENGTH                   (2048)
 #define ASCII_INTEGER_DIFFERENCE                 (48)
-#define REQUEST_BODY                             "/myhellomessage=Hello!"
-#define HTTP_PATH                                "/"
-#define HTTP_GET_PATH_AFTER_PUT                  "/myhellomessage"
+#define REQUEST_BODY                             "/helloworld"
+#define HTTP_PATH                                "/helloworld"
+#define HTTP_GET_PATH_AFTER_PUT                  "/helloworld"
 #define REQUEST_BODY_LENGTH                      ( sizeof( REQUEST_BODY ) - 1U )
 
 /* Wi-Fi re-connection time interval in milliseconds */

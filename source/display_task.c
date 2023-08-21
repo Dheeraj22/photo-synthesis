@@ -113,7 +113,7 @@ void display_task(void *arg)
 				{
 					if(index == 0)
 					{
-						index = 4;
+						index = NUM_OF_FILES - 1;
 					}
 					else
 					{

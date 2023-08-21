@@ -1,42 +1,42 @@
 /******************************************************************************
-* File Name: secure_http_client.c
-*
-* Description: This file contains the necessary functions to start the HTTPS
-* client and send GET, POST, and PUT request to the HTTPS client.
-*
-* Related Document: See README.md
-*******************************************************************************
-* Copyright 2023, Cypress Semiconductor Corporation (an Infineon company) or
-* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
-*
-* This software, including source code, documentation and related
-* materials ("Software") is owned by Cypress Semiconductor Corporation
-* or one of its affiliates ("Cypress") and is protected by and subject to
-* worldwide patent protection (United States and foreign),
-* United States copyright laws and international treaty provisions.
-* Therefore, you may use this Software only as provided in the license
-* agreement accompanying the software package from which you
-* obtained this Software ("EULA").
-* If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software
-* source code solely for use in connection with Cypress's
-* integrated circuit products.  Any reproduction, modification, translation,
-* compilation, or representation of this Software except as specified
-* above is prohibited without the express written permission of Cypress.
-*
-* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. Cypress
-* reserves the right to make changes to the Software without notice. Cypress
-* does not assume any liability arising out of the application or use of the
-* Software or any product or circuit described in the Software. Cypress does
-* not authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
-* of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability.
-*******************************************************************************/
+ * File Name: secure_http_client.c
+ *
+ * Description: This file contains the necessary functions to start the HTTPS
+ * client and send GET, POST, and PUT request to the HTTPS client.
+ *
+ * Related Document: See README.md
+ *******************************************************************************
+ * Copyright 2023, Cypress Semiconductor Corporation (an Infineon company) or
+ * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
+ *
+ * This software, including source code, documentation and related
+ * materials ("Software") is owned by Cypress Semiconductor Corporation
+ * or one of its affiliates ("Cypress") and is protected by and subject to
+ * worldwide patent protection (United States and foreign),
+ * United States copyright laws and international treaty provisions.
+ * Therefore, you may use this Software only as provided in the license
+ * agreement accompanying the software package from which you
+ * obtained this Software ("EULA").
+ * If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
+ * non-transferable license to copy, modify, and compile the Software
+ * source code solely for use in connection with Cypress's
+ * integrated circuit products.  Any reproduction, modification, translation,
+ * compilation, or representation of this Software except as specified
+ * above is prohibited without the express written permission of Cypress.
+ *
+ * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. Cypress
+ * reserves the right to make changes to the Software without notice. Cypress
+ * does not assume any liability arising out of the application or use of the
+ * Software or any product or circuit described in the Software. Cypress does
+ * not authorize its products for use in any products where a malfunction or
+ * failure of the Cypress product may reasonably be expected to result in
+ * significant property damage, injury or death ("High Risk Product"). By
+ * including Cypress's product in a High Risk Product, the manufacturer
+ * of such system or application assumes all risk of such use and in doing
+ * so agrees to indemnify Cypress against all liability.
+ *******************************************************************************/
 
 /* Header file includes */
 #include "cyhal.h"
@@ -62,12 +62,18 @@
 #include "secure_http_client.h"
 #include "cy_http_client_api.h"
 #include "secure_keys.h"
+#include "emfile_task.h"
 
 #include "lwip/ip_addr.h"
 
+int image_available = 0;
+extern QueueHandle_t emfile_command_q;
+
+uint8_t image_buffer[307254];
+
 /*******************************************************************************
-* Global Variables
-********************************************************************************/
+ * Global Variables
+ ********************************************************************************/
 bool get_after_put_flag = false;
 cy_http_client_method_t http_client_method;
 
@@ -95,13 +101,16 @@ cy_http_client_header_t http_header[1];
 cy_http_client_response_t http_response;
 
 /******************************************************************************
-* Function Prototypes
-*******************************************************************************/
-void http_request(void);
-void fetch_https_client_method(void);
+ * Function Prototypes
+ *******************************************************************************/
+//void http_request(const char * pPath);
+//void fetch_https_client_method(void);
 void disconnect_callback_handler(cy_http_client_t handle, cy_http_client_disconn_type_t type, void *args);
-cy_rslt_t send_http_request(cy_http_client_t handle,cy_http_client_method_t method,const char * pPath);
+cy_rslt_t send_http_request(cy_http_client_t handle,cy_http_client_method_t method,const char * pPath,
+		cy_http_client_request_header_t *request, cy_http_client_header_t *header, cy_http_client_response_t *response);
 static cy_rslt_t configure_https_client(void);
+void check_for_new_images(void);
+void get_bitmaps();
 
 /********************************************************************************
  * Function Name: wifi_connect
@@ -120,50 +129,50 @@ static cy_rslt_t configure_https_client(void);
  *******************************************************************************/
 cy_rslt_t wifi_connect(void)
 {
-    cy_rslt_t result = CY_RSLT_SUCCESS;
-    uint32_t retry_count = 0;
-    cy_wcm_connect_params_t connect_param = {0};
-    cy_wcm_config_t wcm_config = {.interface = CY_WCM_INTERFACE_TYPE_STA};
+	cy_rslt_t result = CY_RSLT_SUCCESS;
+	uint32_t retry_count = 0;
+	cy_wcm_connect_params_t connect_param = {0};
+	cy_wcm_config_t wcm_config = {.interface = CY_WCM_INTERFACE_TYPE_STA};
 
-    result = cy_wcm_init(&wcm_config);
+	result = cy_wcm_init(&wcm_config);
 
-    if (CY_RSLT_SUCCESS == result)
-    {
-        APP_INFO(("Wi-Fi initialization is successful\n"));
-        memcpy(&connect_param.ap_credentials.SSID, WIFI_SSID, sizeof(WIFI_SSID));
-        memcpy(&connect_param.ap_credentials.password, WIFI_PASSWORD, sizeof(WIFI_PASSWORD));
-        connect_param.ap_credentials.security = WIFI_SECURITY_TYPE;
-        APP_INFO(("Join to AP: %s\n", connect_param.ap_credentials.SSID));
+	if (CY_RSLT_SUCCESS == result)
+	{
+		APP_INFO(("Wi-Fi initialization is successful\n"));
+		memcpy(&connect_param.ap_credentials.SSID, WIFI_SSID, sizeof(WIFI_SSID));
+		memcpy(&connect_param.ap_credentials.password, WIFI_PASSWORD, sizeof(WIFI_PASSWORD));
+		connect_param.ap_credentials.security = WIFI_SECURITY_TYPE;
+		APP_INFO(("Join to AP: %s\n", connect_param.ap_credentials.SSID));
 
-        /*
-         * Connect to Access Point. It validates the connection parameters
-         * and then establishes connection to AP.
-         */
-        for (retry_count = 0; retry_count < MAX_WIFI_RETRY_COUNT; retry_count++)
-        {
-             result = cy_wcm_connect_ap(&connect_param, &ip_addr);
+		/*
+		 * Connect to Access Point. It validates the connection parameters
+		 * and then establishes connection to AP.
+		 */
+		for (retry_count = 0; retry_count < MAX_WIFI_RETRY_COUNT; retry_count++)
+		{
+			result = cy_wcm_connect_ap(&connect_param, &ip_addr);
 
-             if (CY_RSLT_SUCCESS == result)
-             {
-                 APP_INFO(("Successfully joined Wi-Fi network %s\n", connect_param.ap_credentials.SSID));
+			if (CY_RSLT_SUCCESS == result)
+			{
+				APP_INFO(("Successfully joined Wi-Fi network %s\n", connect_param.ap_credentials.SSID));
 
-                 if (CY_WCM_IP_VER_V4 == ip_addr.version)
-                 {
-                     APP_INFO(("Assigned IP address: %s\n", ip4addr_ntoa((const ip4_addr_t *)&ip_addr.ip.v4)));
-                 }
-                 else if (CY_WCM_IP_VER_V6 == ip_addr.version)
-                 {
-                     APP_INFO(("Assigned IP address: %s\n", ip6addr_ntoa((const ip6_addr_t *)&ip_addr.ip.v6)));
-                 }
+				if (CY_WCM_IP_VER_V4 == ip_addr.version)
+				{
+					APP_INFO(("Assigned IP address: %s\n", ip4addr_ntoa((const ip4_addr_t *)&ip_addr.ip.v4)));
+				}
+				else if (CY_WCM_IP_VER_V6 == ip_addr.version)
+				{
+					APP_INFO(("Assigned IP address: %s\n", ip6addr_ntoa((const ip6_addr_t *)&ip_addr.ip.v6)));
+				}
 
-                 break;
-             }
+				break;
+			}
 
-             ERR_INFO(("Failed to join Wi-Fi network. Retrying...\n"));
-        }
-    }
+			ERR_INFO(("Failed to join Wi-Fi network. Retrying...\n"));
+		}
+	}
 
-    return result;
+	return result;
 }
 
 /*******************************************************************************
@@ -181,7 +190,7 @@ cy_rslt_t wifi_connect(void)
  *******************************************************************************/
 void disconnect_callback_handler(cy_http_client_t handle, cy_http_client_disconn_type_t type, void *args)
 {
-    printf("\nApplication Disconnect callback triggered for handle = %p type=%d\n", handle, type);
+	printf("\nApplication Disconnect callback triggered for handle = %p type=%d\n", handle, type);
 }
 
 /*******************************************************************************
@@ -199,70 +208,28 @@ void disconnect_callback_handler(cy_http_client_t handle, cy_http_client_disconn
  *
  *******************************************************************************/
 cy_rslt_t send_http_request( cy_http_client_t handle, cy_http_client_method_t method,
-                               const char * pPath)
+		const char * pPath, cy_http_client_request_header_t *request,
+		cy_http_client_header_t *header, cy_http_client_response_t *response)
 {
-    cy_http_client_request_header_t request;
-    cy_http_client_header_t header;
+	/* Return value of all methods from the HTTP Client library API. */
+	cy_rslt_t http_status = CY_RSLT_SUCCESS;
 
-    cy_http_client_response_t response;
+	http_status = cy_http_client_write_header(handle, request, header, NUM_HTTP_HEADERS);
+	if( http_status != CY_RSLT_SUCCESS )
+	{
+		printf("\nWrite Header ----------- Fail \n");
+		return http_status;
+	}
+	else
+	{
+		printf( "\n Sending Request Headers:\n%.*s\n",( int ) request->headers_len, ( char * ) request->buffer);
+	}
 
-    /* Return value of all methods from the HTTP Client library API. */
-    cy_rslt_t http_status = CY_RSLT_SUCCESS;
+	http_status = cy_http_client_send(handle, request, REQUEST_BODY, REQUEST_BODY_LENGTH, response);
 
-    /* Initialize the response object. The same buffer used for storing
-     * request headers is reused here. */
-    request.buffer = http_get_buffer;
-    request.buffer_len = HTTP_GET_BUFFER_LENGTH;
-
-    request.headers_len = HTTP_REQUEST_HEADER_LEN;
-    request.method = method;
-    request.range_end = HTTP_REQUEST_RANGE_END;
-    request.range_start = HTTP_REQUEST_RANGE_START;
-    request.resource_path = pPath;
-
-    header.field = "Content-Type";
-    header.field_len = sizeof("Content-Type")-1;
-    header.value = "application/x-www-form-urlencoded";
-    header.value_len = sizeof("application/x-www-form-urlencoded")-1;
-
-    http_status = cy_http_client_write_header(handle, &request, &header, NUM_HTTP_HEADERS);
-    if( http_status != CY_RSLT_SUCCESS )
-    {
-        printf("\nWrite Header ----------- Fail \n");
-        return http_status;
-    }
-    else
-    {
-        printf( "\n Sending Request Headers:\n%.*s\n",( int ) request.headers_len, ( char * ) request.buffer);
-    }
-
-    http_status = cy_http_client_send(handle, &request, (uint8_t *)REQUEST_BODY, REQUEST_BODY_LENGTH, &response);
-    if( http_status != CY_RSLT_SUCCESS )
-    {
-        printf("\nFailed to send HTTP method=%d\n Error=%ld\r\n",request.method,(unsigned long)http_status);
-        return http_status;
-    }
-    else
-    {
-        if ( CY_HTTP_CLIENT_METHOD_HEAD != method )
-        {
-            TEST_INFO(( "Received HTTP response from %.*s%.*s...\n"
-                   "Response Headers:\n %.*s\n"
-                   "Response Status :\n %u \n"
-                   "Response Body   :\n %.*s\n",
-                   ( int ) sizeof(HTTPS_SERVER_HOST)-1, HTTPS_SERVER_HOST,
-                   ( int ) sizeof(request.resource_path) -1, request.resource_path,
-                   ( int ) response.headers_len, response.header,
-                   response.status_code,
-                   ( int ) response.body_len, response.body ) );
-
-        }
-        printf("\n buffer_len:[%d] headers_len:[%d] header_count:[%d] body_len:[%d] content_len:[%d]\n",
-                 response.buffer_len, response.headers_len, response.header_count, response.body_len, response.content_len);
-    }
-
-    return http_status;
+	return http_status;
 }
+
 /*******************************************************************************
  * Function Name: configure_https_client
  *******************************************************************************
@@ -280,42 +247,34 @@ cy_rslt_t send_http_request( cy_http_client_t handle, cy_http_client_method_t me
  *******************************************************************************/
 static cy_rslt_t configure_https_client(void)
 {
-    cy_rslt_t result = CY_RSLT_SUCCESS;
-    cy_http_disconnect_callback_t http_cb;
+	cy_rslt_t result = CY_RSLT_SUCCESS;
+	cy_http_disconnect_callback_t http_cb;
 
-    ( void ) memset( &security_config, 0, sizeof( security_config ) );
-    ( void ) memset( &server_info, 0, sizeof( server_info ) );
+	( void ) memset( &security_config, 0, sizeof( security_config ) );
+	( void ) memset( &server_info, 0, sizeof( server_info ) );
 
-    /* Set the credential information. */
-    security_config.client_cert      = (const char *) &keyCLIENT_CERTIFICATE_PEM;
-    security_config.client_cert_size = sizeof( keyCLIENT_CERTIFICATE_PEM );
-    security_config.private_key      = (const char *) &keyCLIENT_PRIVATE_KEY_PEM;
-    security_config.private_key_size = sizeof( keyCLIENT_PRIVATE_KEY_PEM );
-    security_config.root_ca          = (const char *) &keySERVER_ROOTCA_PEM;
-    security_config.root_ca_size     = sizeof( keySERVER_ROOTCA_PEM );
+	server_info.host_name = HTTPS_SERVER_HOST;
+	server_info.port = HTTPS_PORT;
 
-    server_info.host_name = HTTPS_SERVER_HOST;
-    server_info.port = HTTPS_PORT;
+	/* Initialize the HTTP Client Library. */
+	result = cy_http_client_init();
+	if( result != CY_RSLT_SUCCESS )
+	{
+		/* Failure path. */
+		ERR_INFO(("Failed to initialize http client.\n"));
+	}
 
-    /* Initialize the HTTP Client Library. */
-    result = cy_http_client_init();
-    if( result != CY_RSLT_SUCCESS )
-    {
-        /* Failure path. */
-        ERR_INFO(("Failed to initialize http client.\n"));
-    }
+	http_cb = disconnect_callback_handler;
 
-    http_cb = disconnect_callback_handler;
+	/* Create an instance of the HTTP client. */
+	result = cy_http_client_create(NULL, &server_info, http_cb, NULL, &https_client);
 
-    /* Create an instance of the HTTP client. */
-    result = cy_http_client_create(&security_config, &server_info, http_cb, NULL, &https_client);
-    
-    if( result != CY_RSLT_SUCCESS )
-    {
-        /* Failure path */
-        ERR_INFO(("Failed to create http client.\n"));
-    }
-    return result;
+	if( result != CY_RSLT_SUCCESS )
+	{
+		/* Failure path */
+		ERR_INFO(("Failed to create http client.\n"));
+	}
+	return result;
 }
 
 /*******************************************************************************
@@ -338,36 +297,197 @@ static cy_rslt_t configure_https_client(void)
  *******************************************************************************/
 void https_client_task(void *arg)
 {
-    cy_rslt_t result = CY_RSLT_TYPE_ERROR;
+	cy_rslt_t result = CY_RSLT_TYPE_ERROR;
 
-    (void)arg;
+	(void)arg;
 
-    /* Connects to the Wi-Fi Access Point. */
-    result = wifi_connect();
-    PRINT_AND_ASSERT(result, "Wi-Fi connection failed.\n");
+	/* Connects to the Wi-Fi Access Point. */
+	result = wifi_connect();
+	PRINT_AND_ASSERT(result, "Wi-Fi connection failed.\n");
 
-    /* Configure the HTTPS client with all the security parameters and
-     * register a default dynamic URL handler.
-     */
-    result = configure_https_client();
-    PRINT_AND_ASSERT(result, "Failed to configure the HTTPS client.\n");
+	/* Configure the HTTPS client with all the security parameters and
+	 * register a default dynamic URL handler.
+	 */
+	result = configure_https_client();
+	PRINT_AND_ASSERT(result, "Failed to configure the HTTPS client.\n");
 
-    /* Connect the HTTP client to server. */
-    result = cy_http_client_connect(https_client, TRANSPORT_SEND_RECV_TIMEOUT_MS, TRANSPORT_SEND_RECV_TIMEOUT_MS);
-    if( result != CY_RSLT_SUCCESS )
-    {
-        ERR_INFO(("Failed to connect to the http server.\n"));
-    }
-    else
-    {
-        printf("Successfully connected to http server\r\n");
-        while(true)
-        {
-            /*fetch HTTP client Methods. */
-            fetch_https_client_method();
-        }
-    }
+	/* Connect the HTTP client to server. */
+	result = cy_http_client_connect(https_client, TRANSPORT_SEND_RECV_TIMEOUT_MS, TRANSPORT_SEND_RECV_TIMEOUT_MS);
+	if( result != CY_RSLT_SUCCESS )
+	{
+		ERR_INFO(("Failed to connect to the http server.\n"));
+	}
+	else
+	{
+		printf("Successfully connected to http server\r\n");
+
+		while(1)
+		{
+			check_for_new_images();
+
+			vTaskDelay(pdMS_TO_TICKS(1000));
+
+			get_bitmaps();
+
+			vTaskDelay(pdMS_TO_TICKS(10000));
+		}
+	}
 }
+
+void check_for_new_images(void)
+{
+	cy_http_client_request_header_t request;
+	cy_http_client_header_t header;
+	const char *pPath = "/check_for_images";
+	cy_rslt_t result = CY_RSLT_SUCCESS;
+	cy_http_client_response_t response;
+
+	http_client_method = CY_HTTP_CLIENT_METHOD_GET;
+
+	/* Initialize the response object. The same buffer used for storing
+	 * request headers is reused here. */
+	request.buffer = http_get_buffer;
+	request.buffer_len = HTTP_GET_BUFFER_LENGTH;
+
+	request.headers_len = HTTP_REQUEST_HEADER_LEN;
+	request.method = CY_HTTP_CLIENT_METHOD_GET;
+	request.range_end = HTTP_REQUEST_RANGE_END;
+	request.range_start = HTTP_REQUEST_RANGE_START;
+	request.resource_path = pPath;
+
+	header.field = "Content-Type";
+	header.field_len = sizeof("Content-Type")-1;
+	header.value = "text/html";
+	header.value_len = sizeof("text/html")-1;
+
+	printf("\n HTTP GET Request..\n");
+
+	result = send_http_request(https_client, http_client_method, pPath, &request, &header, &response);
+
+	if( result != CY_RSLT_SUCCESS )
+	{
+		printf("\nFailed to send HTTP method=%d\n Error=%ld\r\n",request.method,(unsigned long) result);
+	}
+
+	if(strcmp(response.body, "1") == 0)
+	{
+		printf("New Image exists!\r\n");
+		image_available = 1;
+	}
+	else
+	{
+		printf("No new images found!\r\n");
+		image_available = 0;
+	}
+}
+
+void get_bitmaps(void)
+{
+	cy_http_client_request_header_t request;
+	cy_http_client_header_t header;
+	const char *pPath = "/get_image";
+	cy_rslt_t result = CY_RSLT_SUCCESS;
+	cy_http_client_response_t response;
+	//emfile_command_t emfile_cmd;
+
+	http_client_method = CY_HTTP_CLIENT_METHOD_GET;
+
+	/* Initialize the response object. The same buffer used for storing
+	 * request headers is reused here. */
+	request.buffer = image_buffer;
+	request.buffer_len = 307254;
+
+	request.headers_len = HTTP_REQUEST_HEADER_LEN;
+	request.method = CY_HTTP_CLIENT_METHOD_GET;
+	request.range_end = HTTP_REQUEST_RANGE_END;
+	request.range_start = HTTP_REQUEST_RANGE_START;
+	request.resource_path = pPath;
+
+	header.field = "Content-Type";
+	header.field_len = sizeof("Content-Type")-1;
+	header.value = "image/bmp";
+	header.value_len = sizeof("image/bmp")-1;
+
+	printf("\n HTTP GET Request..\n");
+
+	result = send_http_request(https_client, http_client_method, pPath, &request, &header, &response);
+
+	if( result != CY_RSLT_SUCCESS )
+	{
+		printf("\nFailed to send HTTP method=%d\n Error=%ld\r\n", request.method, (unsigned long) result);
+	}
+
+	//memset(&image_buffer, 0, sizeof(image_buffer));
+	memcpy(&image_buffer, response.body, sizeof(response.body));
+	//
+	//	for(int i = 0; i < 20; i++)
+	//	{
+	//		printf("%d ", image_buffer[i]);
+	//		if(i % 8 == 0)
+	//		{
+	//			printf("\r\n");
+	//		}
+	//	}
+	//
+
+//	if(image_buffer[0] == 'B')
+//	{
+//
+////	}
+
+	emfile_command_t image_write = {FILE_WRITE, 4u, image_buffer, 307254};
+
+	xQueueSendToBack(emfile_command_q, &image_write, portMAX_DELAY);
+
+	//printf("\r\n");
+
+	//	emfile_command_t image_write = {FILE_WRITE, 5u, (char *) image_buffer, strlen(image_buffer)};
+	//
+	//	xQueueSendToBack(emfile_command_q, &image_write, portMAX_DELAY);
+
+}
+
+void check_server_status(void)
+{
+	cy_http_client_request_header_t request;
+	cy_http_client_header_t header;
+	const char *pPath = "/helloworld";
+	cy_rslt_t result = CY_RSLT_SUCCESS;
+	cy_http_client_response_t response;
+
+	http_client_method = CY_HTTP_CLIENT_METHOD_GET;
+
+	/* Initialize the response object. The same buffer used for storing
+	 * request headers is reused here. */
+	request.buffer = http_get_buffer;
+	request.buffer_len = HTTP_GET_BUFFER_LENGTH;
+
+	request.headers_len = HTTP_REQUEST_HEADER_LEN;
+	request.method = CY_HTTP_CLIENT_METHOD_GET;
+	request.range_end = HTTP_REQUEST_RANGE_END;
+	request.range_start = HTTP_REQUEST_RANGE_START;
+	request.resource_path = pPath;
+
+	header.field = "Content-Type";
+	header.field_len = sizeof("Content-Type")-1;
+	header.value = "text/html";
+	header.value_len = sizeof("text/html")-1;
+
+	printf("\n HTTP GET Request..\n");
+
+	result = send_http_request(https_client, http_client_method, pPath, &request, &header, &response);
+
+	if( result != CY_RSLT_SUCCESS )
+	{
+		ERR_INFO(("Failed to send the http request.\n"));
+	}
+	else
+	{
+		printf("\r\n Successfully sent GET request to http server\r\n");
+		printf("\r\n The http status code is :: %d\r\n",http_response.status_code);
+	}
+}
+
 
 /*******************************************************************************
  * Function Name: fetch_https_client_method
@@ -382,60 +502,60 @@ void https_client_task(void *arg)
  *  None.
  *
  *******************************************************************************/
-void fetch_https_client_method(void)
-{
-
-    /* Status variable */
-    uint8_t uart_read_value;
-    uint8_t uart_read_integer;
-
-    /* Options to select the method*/
-    printf("\n===============================================================\n");
-    printf(MENU_HTTPS_METHOD);
-    printf("\n===============================================================\n");
-
-    /* Reading option number from console */
-    while (cyhal_uart_getc(&cy_retarget_io_uart_obj, &uart_read_value, 1) != CY_RSLT_SUCCESS);
-    /* Converting ASCII character to Integer value */
-    uart_read_integer = uart_read_value - ASCII_INTEGER_DIFFERENCE;
-
-    switch(uart_read_integer)
-    {
-         case HTTPS_GET_METHOD:
-         {
-             printf("\n HTTP GET Request..\n");
-             http_client_method = CY_HTTP_CLIENT_METHOD_GET;
-             break;
-         }
-         case HTTPS_POST_METHOD:
-         {
-             printf("\n HTTP POST Request..\n");
-             http_client_method = CY_HTTP_CLIENT_METHOD_POST;
-             break;
-         }
-         case HTTPS_PUT_METHOD:
-         {
-             printf("\n HTTP PUT Request..\n");
-             http_client_method = CY_HTTP_CLIENT_METHOD_PUT;
-             break;
-         }
-         case HTTPS_GET_METHOD_AFTER_PUT:
-         {
-             printf("\n HTTP GET FOR PUT Request..\n");
-             http_client_method = CY_HTTP_CLIENT_METHOD_GET;
-             get_after_put_flag = true;
-             break;
-         }
-        default:
-        {
-            printf("\x1b[2J\x1b[;H");
-            printf("\r\nPlease select from the given valid options\r\n");
-        }
-    }
-
-    /* Send the HTTP request and body to the server, and receive the status from it. */
-    http_request();
-}
+//void fetch_https_client_method(void)
+//{
+//
+//	/* Status variable */
+//	uint8_t uart_read_value;
+//	uint8_t uart_read_integer;
+//
+//	/* Options to select the method*/
+//	printf("\n===============================================================\n");
+//	printf(MENU_HTTPS_METHOD);
+//	printf("\n===============================================================\n");
+//
+//	/* Reading option number from console */
+//	while (cyhal_uart_getc(&cy_retarget_io_uart_obj, &uart_read_value, 1) != CY_RSLT_SUCCESS);
+//	/* Converting ASCII character to Integer value */
+//	uart_read_integer = uart_read_value - ASCII_INTEGER_DIFFERENCE;
+//
+//	switch(uart_read_integer)
+//	{
+//	case HTTPS_GET_METHOD:
+//	{
+//		printf("\n HTTP GET Request..\n");
+//		http_client_method = CY_HTTP_CLIENT_METHOD_GET;
+//		break;
+//	}
+//	case HTTPS_POST_METHOD:
+//	{
+//		printf("\n HTTP POST Request..\n");
+//		http_client_method = CY_HTTP_CLIENT_METHOD_POST;
+//		break;
+//	}
+//	case HTTPS_PUT_METHOD:
+//	{
+//		printf("\n HTTP PUT Request..\n");
+//		http_client_method = CY_HTTP_CLIENT_METHOD_PUT;
+//		break;
+//	}
+//	case HTTPS_GET_METHOD_AFTER_PUT:
+//	{
+//		printf("\n HTTP GET FOR PUT Request..\n");
+//		http_client_method = CY_HTTP_CLIENT_METHOD_GET;
+//		get_after_put_flag = true;
+//		break;
+//	}
+//	default:
+//	{
+//		printf("\x1b[2J\x1b[;H");
+//		printf("\r\nPlease select from the given valid options\r\n");
+//	}
+//	}
+//
+//	/* Send the HTTP request and body to the server, and receive the status from it. */
+//	//http_request();
+//}
 
 /*******************************************************************************
  * Function Name: http_request
@@ -450,30 +570,30 @@ void fetch_https_client_method(void)
  *  None.
  *
  *******************************************************************************/
-void http_request(void)
-{
-    cy_rslt_t result = CY_RSLT_SUCCESS;
-
-    /* Send the HTTP request and body to the server, and receive the response from it. */
-    if(get_after_put_flag)
-    {
-        get_after_put_flag = false;
-        result = send_http_request(https_client,http_client_method,HTTP_GET_PATH_AFTER_PUT);
-    }
-    else
-    {
-        result = send_http_request(https_client,http_client_method,HTTP_PATH);
-    }
-
-    if( result != CY_RSLT_SUCCESS )
-    {
-        ERR_INFO(("Failed to send the http request.\n"));
-    }
-    else
-    {
-        printf("\r\n Successfully sent GET request to http server\r\n");
-        printf("\r\n The http status code is :: %d\r\n",http_response.status_code);
-    }
-}
+//void http_request(const char * pPath)
+//{
+//	cy_rslt_t result = CY_RSLT_SUCCESS;
+//
+//	/* Send the HTTP request and body to the server, and receive the response from it. */
+//	if(get_after_put_flag)
+//	{
+//		get_after_put_flag = false;
+//		result = send_http_request(https_client,http_client_method, *pPath);
+//	}
+//	else
+//	{
+//		result = send_http_request(https_client,http_client_method, *pPath);
+//	}
+//
+//	if( result != CY_RSLT_SUCCESS )
+//	{
+//		ERR_INFO(("Failed to send the http request.\n"));
+//	}
+//	else
+//	{
+//		printf("\r\n Successfully sent GET request to http server\r\n");
+//		printf("\r\n The http status code is :: %d\r\n",http_response.status_code);
+//	}
+//}
 /* [] END OF FILE */
 
